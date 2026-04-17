@@ -1,7 +1,49 @@
 
-type Expr = number | string | (Expr)[]
+
+const commands = ["set", "var"] as const
+type Command = typeof commands[number]
+type BinOperators = "+" | "*" | "/" | "-"
+type Expr = number | string | [BinOperators, Expr, Expr] | [Command, string, number | string]
+
+class Environment {
+    parent: Environment | null
+    record: Map<string, string | number> = new Map()
+
+    constructor(parent: Environment | null, record: Map<string, string | number> = new Map()) {
+        this.parent = parent
+        this.record = record
+    }
+    lookup(variable_name: string): number | string {
+        // TODO: lookup in parent
+
+        if (!this.record.has(variable_name)) {
+            if (this.parent) {
+                return this.parent.lookup(variable_name)
+            }
+            throw Error(`Variable ${variable_name} not found`)
+        }
+        return this.record.get(variable_name) as number | string
+    }
+
+    define(variable_name: string, value: number | string) {
+        // TODO: determine if this should throw an error if the variable already exists.
+        this.record.set(variable_name, value)
+        return value
+    }
+
+    assign(variable_name: string, value: number | string) {
+        this.record.set(variable_name, value)
+    }
+}
+
 class Eva {
-    eval(expr: Expr) {
+    global: Environment
+    constructor(global: Environment = new Environment(null, new Map(
+    ))) {
+        this.global = global
+    }
+    eval(expr: Expr, env: Environment = this.global): any { // TODO: type return type
+        // Self Evaluating Expressions
 
         if (isNumber(expr)) {
             return expr
@@ -11,47 +53,79 @@ class Eva {
             return expr.slice(1, -1)
         }
 
+        if (isVariableName(expr)) {
+            return env.lookup(expr)
+        }
+        // ------------------------------------------------------------------
+        // Math Operations
         if (expr[0] === "+") {
-            return this.eval(expr[1]) + this.eval(expr[2]) // TODO: add runtime checks
+            return this.eval(expr[1], env) + this.eval(expr[2], env) // TODO: add runtime checks
 
         }
+        if (expr[0] === "*") {
+            return this.eval(expr[1], env) * this.eval(expr[2], env) // TODO: add runtime checks
 
+        }
+        // -----------------------------------------------------------------
+        // Operations
+
+        if (isCommand(expr[0])) {
+            const [_, var_name, value] = expr
+            if (expr[0] == "var") {
+
+                if (isVariableName(var_name)) {
+                    env.define(var_name, this.eval(value, env))
+                }
+
+                return this.eval(value, env)
+            }
+            if (expr[0] == "set") {
+                // look for the variable in the local scope, 
+                env.lookup(this.eval(var_name, env))
+                // if it doesn't exist, look into the parent environment
+
+            }
+        }
+
+        // 
         else {
             throw Error(`Expr: ${expr} could not be evaluated`)
         }
+
     }
+
+}
+
+// function isVariableName(var_name: string): expr is string {
+
+// }
+function isString(expr: Expr): expr is string { //TODO: change return type to literal or something
+    const result = typeof expr === "string" && (expr[0] === "'" && expr.slice(-1) === "'")
+    // console.log(`isString input: ${JSON.stringify(result)} | result: ${JSON.stringify(result)} `)
+    return result
+
 }
 
 
-function isString(expr: Expr): expr is string {
-
-    if (!(typeof expr === "string")) {
-        return false
-    }
-
-    if (expr[0] == "'" && expr.slice(-1) === "'") {
-        return true
-    }
-    else {
-        console.warn("not sure what should happen in this else branch")
-        return false
-    }
-}
 // type guard number
-
 function isNumber(expr: Expr): expr is number {
+    return typeof expr == "number"
+}
 
-    if (typeof expr === "number") {
-        return true
-    }
+function isVariableName(expr: Expr): expr is string {
+    return typeof expr === "string" && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(expr) // TODO: what does this match ? 
+}
+function isCommand(command: string): command is Command {
 
-    return false
+    return commands.includes(command as Command) //TODO: not sure why the as keyword is used here
+
 
 }
 export {
     Eva,
     isString,
     isNumber,
-    type Expr
+    type Expr,
+    Environment
 }
 

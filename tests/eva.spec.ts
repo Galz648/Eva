@@ -1,36 +1,89 @@
 import { test, describe, expect } from "bun:test"
-import { Eva, isString, type Expr } from "../src/eva"
+import { Environment, Eva, type Expr } from "../src/eva"
 
-test("can evaluate number", () => {
-    const num = 3
-    const eva = new Eva()
-    eva.eval(num)
+
+describe("Self Evaluating Expressions", () => {
+
+    test("can evaluate number", () => {
+        const env = new Environment(null)
+        const num = 3
+        const eva = new Eva(new Environment(null))
+        eva.eval(num, env)
+    })
+
+
+    test("Should evaluate as string", () => {
+        const env = new Environment(null)
+        const str = "'abc'"
+        const eva = new Eva()
+        const evaluated_string = eva.eval(str, env)
+
+        expect(evaluated_string).toEqual(str.slice(1, -1))
+    })
 })
 
+describe("Variables", () => {
+    test("should succeed with variable lookup", () => {
+        const env = new Environment(null)
+        const eva = new Eva()
+        env.define("x", 10)
+        const result = env.lookup("x")
+        expect(result).toEqual(10)
+    })
 
-test("Should evaluate as string", () => {
-    const str = "'ABC'"
-    const eva = new Eva()
-    const evaluated_string = eva.eval(str)
+    test("should fail with variable lookup", () => {
+        const env = new Environment(null)
+        const eva = new Eva()
+        expect(() => env.lookup("x")).toThrow(new Error("Variable x not found"))
+    })
 
-    expect(evaluated_string).toEqual(str.slice(1, -1))
+
+    test("should succeed with variable lookup in parent environment", () => {
+        const env = new Environment(null)
+        const eva = new Eva(new Environment(null, new Map([["x", 10]])))
+        const result = eva.eval("x")
+        expect(result).toEqual(10)
+    })
 })
 
+describe("Commands", () => {
+    test("Should define (var) variable", () => {
+        const env = new Environment(null)
+        const eva = new Eva()
+        const result = eva.eval(["var", "x", 10], env)
+        expect(result).toEqual(10)
+    })
 
-test("can add numbers", () => {
-    const str: Expr = ["+", 1, 2]
-    const eva = new Eva()
-    const calculation = eva.eval(str)
-
-    expect(calculation).toEqual(3)
 })
 
-test("should perform complex (nested) number addition", () => {
-    const str: Expr = ["+", 5, ["+", 1, 2]]
-    const eva = new Eva()
-    const calculation = eva.eval(str)
+describe("Math Operations", () => {
 
-    expect(calculation).toEqual(8)
+    test("can add numbers", () => {
+        const env = new Environment(null)
+        const str: Expr = ["+", 1, 2]
+        const eva = new Eva()
+        const calculation = eva.eval(str, env)
+
+        expect(calculation).toEqual(3)
+    })
+
+    test("should perform complex (nested) number addition", () => {
+        const env = new Environment(null)
+        const str: Expr = ["+", 5, ["+", 1, 2]]
+        const eva = new Eva()
+        const calculation = eva.eval(str, env)
+
+        expect(calculation).toEqual(8)
+    })
+
+    test("can multiply numbers", () => {
+        const env = new Environment(null)
+        const str: Expr = ["*", 2, 2]
+        const eva = new Eva()
+        const calculation = eva.eval(str, env)
+
+        expect(calculation).toEqual(4)
+    })
 })
 
 
