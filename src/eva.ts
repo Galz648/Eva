@@ -1,5 +1,6 @@
+import { resolve } from "bun"
 
-
+type Scope = Map<string, string | number>
 const commands = ["set", "var"] as const
 type Command = typeof commands[number]
 type BinOperators = "+" | "*" | "/" | "-"
@@ -8,22 +9,34 @@ type Expr = number | string | [BinOperators, Expr, Expr] | [Command, string, Exp
 
 class Environment {
     parent: Environment | null
-    record: Map<string, string | number> = new Map()
+    record: Scope = new Map()
 
-    constructor(parent: Environment | null, record: Map<string, string | number> = new Map()) {
+    constructor(parent: Environment | null, record: Scope = new Map()) {
         this.parent = parent
         this.record = record
     }
-    lookup(variable_name: string): number | string {
+
+    resolveScopeByVariableName(variable_name: string): Scope {
         // TODO: lookup in parent
 
         if (!this.record.has(variable_name)) {
             if (this.parent) {
-                return this.parent.lookup(variable_name)
+                this.parent.resolveScopeByVariableName(variable_name)
             }
             throw Error(`Variable ${variable_name} not found`)
         }
-        return this.record.get(variable_name) as number | string
+        return this.record
+    }
+
+    lookup(variable_name: string): string | number {
+        const scope = this.resolveScopeByVariableName(variable_name)
+        const value = scope.get(variable_name)
+        if (value !== undefined) {
+            return value
+        }
+        else {
+            throw new Error(`Could not resolve lookup for variable ${variable_name}`)
+        }
     }
 
     define(variable_name: string, value: number | string) {
@@ -33,7 +46,9 @@ class Environment {
     }
 
     assign(variable_name: string, value: number | string) {
-        this.record.set(variable_name, value)
+        const scope = this.resolveScopeByVariableName(variable_name)
+        // set the variable inside the found scope
+        scope.set(variable_name, value)
     }
 }
 
@@ -108,10 +123,9 @@ class Eva {
                 return this.eval(value, env)
             }
             if (expr[0] == "set") {
-                // look for the variable in the local scope, 
-                env.lookup(this.eval(var_name, env))
-                // if it doesn't exist, look into the parent environment
-
+                // should set the value of the variable in the current environment
+                env.assign(var_name as string, this.eval(value, env))
+                return this.eval(value, env)
             }
         }
 

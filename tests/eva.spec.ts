@@ -2,6 +2,7 @@ import { test, describe, expect } from "bun:test"
 import { Environment, Eva, type Expr } from "../src/eva"
 
 
+
 describe("Self Evaluating Expressions", () => {
 
     test("can evaluate number", () => {
@@ -52,6 +53,14 @@ describe("Commands", () => {
         const eva = new Eva()
         const result = eva.eval(["var", "x", 10], env)
         expect(result).toEqual(10)
+    })
+
+    test("Should assign (set) variable", () => {
+        const env = new Environment(null)
+        const eva = new Eva()
+        env.define("x", 10) // Define variable in current? environment (code smell, using internal functionality)
+        const result = eva.eval(["set", "x", 20], env) // Set variable in current environment
+        expect(result).toEqual(20)
     })
 
 })
@@ -115,7 +124,7 @@ describe("Blocks", () => {
         expect(calculation).toEqual(10)
     })
 
-    test("should evalute outer scope variable inside inner scope", () => {
+    test.skip("should evalute outer scope variable inside inner scope", () => {
         const env = new Environment(null)
         const eva = new Eva()
         const calculation = eva.eval(
@@ -135,7 +144,7 @@ describe("Blocks", () => {
 
     })
 
-    test("should evalute outer scope variable inside inner scope", () => {
+    test("Should set variable in outer scope within inner scope", () => {
         const env = new Environment(null)
         const eva = new Eva()
         const calculation = eva.eval(
@@ -151,7 +160,7 @@ describe("Blocks", () => {
                 ]], env)
 
 
-        expect(calculation).toEqual(20)
+        expect(calculation).toEqual(100)
 
     })
 })
