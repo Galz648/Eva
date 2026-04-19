@@ -3,7 +3,8 @@
 const commands = ["set", "var"] as const
 type Command = typeof commands[number]
 type BinOperators = "+" | "*" | "/" | "-"
-type Expr = number | string | [BinOperators, Expr, Expr] | [Command, string, number | string]
+type Block = ['begin', Expr[]] // NOTE: this diverges from the use a block in the video series
+type Expr = number | string | [BinOperators, Expr, Expr] | [Command, string, Expr] | Block
 
 class Environment {
     parent: Environment | null
@@ -42,6 +43,24 @@ class Eva {
     ))) {
         this.global = global
     }
+
+    evalBlock(block: Block, block_env: Environment) {
+
+
+        let lastest_expression_evaluated // TODO: type this or something
+        const expressions: Expr[] = block[1]
+        //'begin', 
+        // [
+        //      ['var', 'x', 10], 
+        //      ['var', 'y', 10], 
+        //      ['+', ['*', 'x', 'y'], 30]
+        // ]
+        expressions.forEach((expr) => {
+            lastest_expression_evaluated = this.eval(expr, block_env)
+        })
+
+        return lastest_expression_evaluated
+    }
     eval(expr: Expr, env: Environment = this.global): any { // TODO: type return type
         // Self Evaluating Expressions
 
@@ -67,8 +86,17 @@ class Eva {
 
         }
         // -----------------------------------------------------------------
-        // Operations
+        // Blocks - a sequence of expressions
 
+        if (expr[0] === 'begin') {
+            // should initialize a block scope environment
+            const block_env = new Environment(env, new Map())
+            return this.evalBlock(expr, block_env)
+        }
+
+
+
+        // Commands
         if (isCommand(expr[0])) {
             const [_, var_name, value] = expr
             if (expr[0] == "var") {
@@ -87,7 +115,7 @@ class Eva {
             }
         }
 
-        // 
+
         else {
             throw Error(`Expr: ${expr} could not be evaluated`)
         }
