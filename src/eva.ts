@@ -3,8 +3,11 @@ type Scope = Map<string, string | number>
 const commands = ["set", "var"] as const
 type Command = typeof commands[number]
 type BinOperators = "+" | "*" | "/" | "-"
+const comparisonOperators = [">", "<", "==", "!==", "=>", "<="] as const
+type ComparisonOperator = typeof comparisonOperators[number]
 type Block = ['begin', Expr[]] // NOTE: this diverges from the use a block in the video series
-type Expr = number | string | [BinOperators, Expr, Expr] | [Command, string, Expr] | Block
+type IfBlock = ['if', Expr, Expr, Expr]
+type Expr = number | string | [BinOperators | ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock
 
 class Environment {
     parent: Environment | null
@@ -128,9 +131,42 @@ class Eva {
             }
         }
 
+        if (isComparisonOperator(expr[0])) {
+            const [operator, arg_1, arg_2] = expr
+            const arg_1_value = this.eval(arg_1, env)
+            const arg_2_value = this.eval(arg_2, env)
+
+            if (!(isNumber(arg_1_value) && isNumber(arg_2_value))) {
+                throw new Error(`Could not compare non-number values, after resolution and evaluation.\n\t expr: ${expr}\n\t typeof arg_1: ${typeof arg_1_value}\n\t typeof arg_2: ${typeof arg_2_value}`)
+            }
+            if (operator === ">") {
+                return arg_1_value > arg_2_value ? true : false
+            }
+            if (operator === "<") {
+                return arg_1_value < arg_2_value ? true : false
+            }
+            if (operator === "==") {
+                return arg_1_value === arg_2_value ? true : false
+            }
+
+
+        }
+        if (expr[0] == "if") {
+            const [_, condition, if_branch, else_branch] = expr
+
+            if (this.eval(condition, env) === true) { // TODO: replace literal with type
+                return this.eval(if_branch, env)
+            }
+            else if (this.eval(condition, env) === false) {
+                return this.eval(else_branch, env)
+            }
+            else {
+                throw new Error(`if condition didn't evaluate to a boolean. ${JSON.stringify(condition)}`)
+            }
+        }
 
         else {
-            throw Error(`Expr: ${expr} could not be evaluated`)
+            throw new Error(`Expr: ${expr} could not be evaluated`)
         }
 
     }
@@ -153,6 +189,9 @@ function isNumber(expr: Expr): expr is number {
     return typeof expr == "number"
 }
 
+function isComparisonOperator(operator: string): operator is ComparisonOperator {
+    return typeof operator === "string" && comparisonOperators.includes(operator as ComparisonOperator)
+}
 function isVariableName(expr: Expr): expr is string {
     return typeof expr === "string" && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(expr) // TODO: what does this match ? 
 }
