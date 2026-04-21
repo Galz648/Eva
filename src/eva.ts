@@ -7,7 +7,8 @@ const comparisonOperators = [">", "<", "==", "!==", "=>", "<="] as const
 type ComparisonOperator = typeof comparisonOperators[number]
 type Block = ['begin', Expr[]] // NOTE: this diverges from the use a block in the video series
 type IfBlock = ['if', Expr, Expr, Expr]
-type Expr = number | string | [BinOperators | ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock
+type whileBlock = ["while", Expr, Block] // while, condition, code
+type Expr = number | string | [BinOperators | ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock | whileBlock
 
 class Environment {
     parent: Environment | null
@@ -151,7 +152,7 @@ class Eva {
 
 
         }
-        if (expr[0] == "if") {
+        if (expr[0] === "if") {
             const [_, condition, if_branch, else_branch] = expr
 
             if (this.eval(condition, env) === true) { // TODO: replace literal with type
@@ -165,10 +166,25 @@ class Eva {
             }
         }
 
+        if (expr[0] === "while") {
+            const [_tag, condition, _do] = expr
+            let result
+            while (this.eval(condition, env)) {
+                result = this.eval(_do, env)
+            }
+            return result
+        }
+
+
+
+
+
+
+
+
         else {
             throw new Error(`Expr: ${expr} could not be evaluated`)
         }
-
     }
 
 }

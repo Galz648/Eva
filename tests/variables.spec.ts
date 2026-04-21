@@ -1,8 +1,14 @@
-import { describe, expect, test } from "bun:test";
-import { Environment, Eva } from "../src/eva";
+import { describe, expect, test } from "bun:test"
+import { Environment, Eva } from "../src/eva"
 
 describe("Variables", () => {
-    test("should succeed with variable lookup", () => {
+    test("Should succeed with variable lookup, through eval", () => {
+        const eva = new Eva()
+        eva.eval(["var", "x", 10])
+        const x = eva.eval("x")
+        expect(x).toEqual(10)
+    })
+    test("should succeed with variable lookup", () => { // TODO: change implementation - define "x" not using internal functions
         const env = new Environment(null)
         const eva = new Eva()
         env.define("x", 10)
@@ -37,7 +43,7 @@ describe("Commands", () => {
     test("Should assign (set) variable", () => {
         const env = new Environment(null)
         const eva = new Eva()
-    env.define("x", 10) // TODO: refrain from using internal implementation in tests - replace with global declaration in `Environment`?
+        env.define("x", 10) // TODO: refrain from using internal implementation in tests - replace with global declaration in `Environment`?
         const result = eva.eval(["set", "x", 20], env) // Set variable in current environment
         expect(result).toEqual(20)
     })
