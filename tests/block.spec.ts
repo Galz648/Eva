@@ -29,7 +29,7 @@ describe("Blocks", () => {
         expect(calculation).toEqual(10)
     })
 
-    test.skip("should evalute outer scope variable inside inner scope", () => {
+    test("should evalute outer scope variable inside inner scope", () => {
         const env = new Environment(null)
         const eva = new Eva()
         const calculation = eva.eval(

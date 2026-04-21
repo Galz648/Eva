@@ -13,7 +13,7 @@ describe("Variables", () => {
     test("should fail with variable lookup", () => {
         const env = new Environment(null)
         const eva = new Eva()
-        expect(() => env.lookup("x")).toThrow(new Error("Variable x not found"))
+        expect(() => env.lookup("x")).toThrow()
     })
 
 

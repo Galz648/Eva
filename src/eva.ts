@@ -1,4 +1,3 @@
-import { resolve } from "bun"
 
 type Scope = Map<string, string | number>
 const commands = ["set", "var"] as const
@@ -21,9 +20,9 @@ class Environment {
 
         if (!this.record.has(variable_name)) {
             if (this.parent) {
-                this.parent.resolveScopeByVariableName(variable_name)
+                return this.parent.resolveScopeByVariableName(variable_name)
             }
-            throw Error(`Variable ${variable_name} not found`)
+            throw Error(`Variable ${variable_name} not found in scope: ${JSON.stringify(this.record)}`)
         }
         return this.record
     }
@@ -76,7 +75,7 @@ class Eva {
 
         return lastest_expression_evaluated
     }
-    eval(expr: Expr, env: Environment = this.global): any { // TODO: type return type
+    eval(expr: Expr, env: Environment = this.global): any { // TODO:type return type
         // Self Evaluating Expressions
 
         if (isNumber(expr)) {
