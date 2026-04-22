@@ -1,5 +1,5 @@
 import { test, describe, expect, xdescribe } from "bun:test"
-import { Environment, Eva, type Expr } from "../src/eva"
+import { Environment, Eva, type Expr } from "../../src/eva"
 
 
 /* 

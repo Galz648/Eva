@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Environment, Eva } from "../src/eva"
+import { Environment, Eva } from "../../src/eva"
 
 describe("Variables", () => {
     test("Should succeed with variable lookup, through eval", () => {

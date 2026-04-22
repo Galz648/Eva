@@ -1,5 +1,5 @@
 import { test, describe, expect } from "bun:test"
-import { Environment, Eva, type Expr } from "../src/eva"
+import { Environment, Eva, type Expr } from "../../src/eva"
 
 describe("Blocks", () => {
     test("should evaluate expressions inside of block (begin keyword)", () => {
