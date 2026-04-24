@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import yyparse from "../../parser/evaParser"
+import yyparse from "../../parser/evaParser" // Fix - replace with alias to root
 test("should convert S expression block to AST", () => {
     const ast = yyparse.parse("(begin (var x 10) (var y 20))")
     expect(ast).toBeDefined();

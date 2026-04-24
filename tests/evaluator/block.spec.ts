@@ -3,16 +3,17 @@ import { Environment, Eva, type Expr } from "../../src/eva"
 
 describe("Blocks", () => {
     test("should evaluate expressions inside of block (begin keyword)", () => {
-        const env = new Environment(null)
         const eva = new Eva()
-        const calculation = eva.eval(['begin', [['var', 'x', 10], ['var', 'y', 10], ['+', ['*', 'x', 'y'], 30]]], env)
+        const calculation = eva.eval(['begin',
+            [['var', 'x', 10], ['var', 'y', 10],
+            ['+', ['*', 'x', 'y'], 30]]])
 
 
         expect(calculation).toEqual(130)
     })
 
     test("should evaluate nested expressions inside block", () => {
-        const env = new Environment(null)
+
         const eva = new Eva()
         const calculation = eva.eval(['begin',
             [['var', 'x', 10],
@@ -23,14 +24,14 @@ describe("Blocks", () => {
                 ]
             ],
                 'x'
-            ]], env)
+            ]])
 
 
         expect(calculation).toEqual(10)
     })
 
     test("should evalute outer scope variable inside inner scope", () => {
-        const env = new Environment(null)
+
         const eva = new Eva()
         const calculation = eva.eval(
             ['begin',
@@ -42,7 +43,7 @@ describe("Blocks", () => {
                     ]
                 ]],
                     "result"
-                ]], env)
+                ]])
 
 
         expect(calculation).toEqual(20)
@@ -50,7 +51,7 @@ describe("Blocks", () => {
     })
 
     test("Should set variable in outer scope within inner scope", () => {
-        const env = new Environment(null)
+
         const eva = new Eva()
         const calculation = eva.eval(
             ['begin',
@@ -62,7 +63,7 @@ describe("Blocks", () => {
                         ]
                     ],
                     "data"
-                ]], env)
+                ]])
 
 
         expect(calculation).toEqual(100)

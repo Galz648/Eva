@@ -1,5 +1,5 @@
 
-type Scope = Map<string, string | number>
+type Scope = Map<string, number | string | Function>
 const commands = ["set", "var"] as const
 type Command = typeof commands[number]
 type BinOperators = "+" | "*" | "/" | "-"
@@ -8,7 +8,13 @@ type ComparisonOperator = typeof comparisonOperators[number]
 type Block = ['begin', Expr[]] // NOTE: this diverges from the use a block in the video series
 type IfBlock = ['if', Expr, Expr, Expr]
 type whileBlock = ["while", Expr, Block] // while, condition, code
-type Expr = number | string | [BinOperators | ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock | whileBlock
+type Expr = number | string | [ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock | whileBlock | Func | Builtin
+// function types
+const builtins = ["null", "true", "false", ...comparisonOperators] as const
+type Builtin = typeof builtins[number]
+type Func = [Builtin | string, ...Expr[]]
+type BuiltinFunction = [Builtin | string, ...Expr[]]
+
 
 class Environment {
     parent: Environment | null
@@ -31,7 +37,7 @@ class Environment {
         return this.record
     }
 
-    lookup(variable_name: string): string | number {
+    lookup(variable_name: string): string | number | Function {
         const scope = this.resolveScopeByVariableName(variable_name)
         const value = scope.get(variable_name)
         if (value !== undefined) {
@@ -58,6 +64,18 @@ class Environment {
 class Eva {
     global: Environment
     constructor(global: Environment = new Environment(null, new Map(
+        [
+            ["+", (op1: number, op2: number) => op1 + op2],
+            ["*", (op1: number, op2: number) => op1 * op2],
+            ["-", (op1: number, op2: number) => {
+                if (op2 === null) {
+                    return -op1
+                }
+                return op1 - op2
+            }],
+            ["/", (op1: number, op2: number) => op1 / op2],
+
+        ]
     ))) {
         this.global = global
     }
@@ -93,16 +111,10 @@ class Eva {
         if (isVariableName(expr)) {
             return env.lookup(expr)
         }
-        // ------------------------------------------------------------------
-        // Math Operations
-        if (expr[0] === "+") {
-            return this.eval(expr[1], env) + this.eval(expr[2], env) // TODO: add runtime checks
 
-        }
-        if (expr[0] === "*") {
-            return this.eval(expr[1], env) * this.eval(expr[2], env) // TODO: add runtime checks
 
-        }
+
+
         // -----------------------------------------------------------------
         // Blocks - a sequence of expressions
 
@@ -111,8 +123,6 @@ class Eva {
             const block_env = new Environment(env, new Map())
             return this.evalBlock(expr, block_env)
         }
-
-
 
         // Commands
         if (isCommand(expr[0])) {
@@ -177,11 +187,14 @@ class Eva {
 
 
 
+        if (isFunction(expr)) {
+            // check the global environment for the function name
+            const [func_name, ...args] = expr
 
-
-
-
-
+            const evaluated_args = [...args].map((arg) => this.eval(arg, env))
+            return (env.lookup(func_name) as Function)(...evaluated_args) // TODO: narrow the type
+            // TODO: handle user defined functions (which scope ?)
+        }
         else {
             throw new Error(`Expr: ${expr} could not be evaluated`)
         }
@@ -209,13 +222,15 @@ function isComparisonOperator(operator: string): operator is ComparisonOperator 
     return typeof operator === "string" && comparisonOperators.includes(operator as ComparisonOperator)
 }
 function isVariableName(expr: Expr): expr is string {
-    return typeof expr === "string" && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(expr) // TODO: what does this match ? 
+    return typeof expr === "string" && /^[+-/*a-zA-Z][a-zA-Z0-9_]*$/.test(expr) // TODO: what does this match ? 
 }
 function isCommand(command: string): command is Command {
 
     return commands.includes(command as Command) //TODO: not sure why the as keyword is used here
+}
 
-
+function isFunction(expr: any): expr is Func {
+    return typeof expr[0] === "string" && Array.isArray(expr)
 }
 export {
     Eva,

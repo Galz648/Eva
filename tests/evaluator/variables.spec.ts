@@ -2,6 +2,29 @@ import { describe, expect, test } from "bun:test"
 import { Environment, Eva } from "../../src/eva"
 
 describe("Variables", () => {
+    test("should resolve function from global scope via lookup (default global environment)", () => {
+
+        const eva = new Eva();
+       
+        const result: Function = eva.global.lookup("+") as Function;
+        expect(typeof result).toBe("function");
+        expect(result(2, 3)).toEqual(5);
+
+    })
+    test("should resolve function from global scope via lookup", () => {
+        const env = new Environment(null, new Map([["+", (a: number, b: number) => a + b]]));
+        const eva = new Eva(env);
+        const result: Function = env.lookup("+") as Function;
+        expect(typeof result).toBe("function");
+        expect(result(2, 3)).toEqual(5);
+
+    })
+    test("should resolve variable from global scope via lookup", () => {
+        const globalEnv = new Environment(null, new Map([["x", 10]]))
+        const eva = new Eva(globalEnv)
+        const result = globalEnv.lookup("x")
+        expect(result).toEqual(10)
+    })
     test("Should succeed with variable lookup, through eval", () => {
         const eva = new Eva()
         eva.eval(["var", "x", 10])
