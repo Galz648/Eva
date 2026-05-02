@@ -1,19 +1,23 @@
-
-type Scope = Map<string, number | string | Function>
+type UserFunction = {
+    params: string[],
+    body: Expr,
+    env: Environment
+}
+type RuntimeValue = number | string | boolean | Function | UserFunction
+type Scope = Map<string, RuntimeValue>
 const commands = ["set", "var"] as const
 type Command = typeof commands[number]
-type BinOperators = "+" | "*" | "/" | "-"
-const comparisonOperators = [">", "<", "==", "!==", "=>", "<="] as const
+type FunctionDefinition = ["def", string, string[], Expr] // definition keyword, function name, args, body
+const comparisonOperators = [">", "<", "==", "!==", "=>", "<="] as const // TODO: move these to the global scope as functions
 type ComparisonOperator = typeof comparisonOperators[number]
-type Block = ['begin', Expr[]] // NOTE: this diverges from the use a block in the video series
+type Block = ['begin', ...Expr[]]
 type IfBlock = ['if', Expr, Expr, Expr]
 type whileBlock = ["while", Expr, Block] // while, condition, code
-type Expr = number | string | [ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock | whileBlock | Func | Builtin
+type Expr = number | string | [ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition
 // function types
-const builtins = ["null", "true", "false", ...comparisonOperators] as const
+const builtins = ["null", "true", "false", ...comparisonOperators, ...commands] as const
 type Builtin = typeof builtins[number]
-type Func = [Builtin | string, ...Expr[]]
-type BuiltinFunction = [Builtin | string, ...Expr[]]
+type FunctionCall = [Builtin | string, ...Expr[]]
 
 
 class Environment {
@@ -37,7 +41,7 @@ class Environment {
         return this.record
     }
 
-    lookup(variable_name: string): string | number | Function {
+    lookup(variable_name: string): RuntimeValue {
         const scope = this.resolveScopeByVariableName(variable_name)
         const value = scope.get(variable_name)
         if (value !== undefined) {
@@ -48,13 +52,13 @@ class Environment {
         }
     }
 
-    define(variable_name: string, value: number | string) {
+    define(variable_name: string, value: RuntimeValue) {
         // TODO: determine if this should throw an error if the variable already exists.
         this.record.set(variable_name, value)
         return value
     }
 
-    assign(variable_name: string, value: number | string) {
+    assign(variable_name: string, value: RuntimeValue) {
         const scope = this.resolveScopeByVariableName(variable_name)
         // set the variable inside the found scope
         scope.set(variable_name, value)
@@ -84,13 +88,7 @@ class Eva {
 
 
         let lastest_expression_evaluated // TODO: type this or something
-        const expressions: Expr[] = block[1]
-        //'begin', 
-        // [
-        //      ['var', 'x', 10], 
-        //      ['var', 'y', 10], 
-        //      ['+', ['*', 'x', 'y'], 30]
-        // ]
+        const expressions: Expr[] = block.slice(1) as Expr[]
         expressions.forEach((expr) => {
             lastest_expression_evaluated = this.eval(expr, block_env)
         })
@@ -99,6 +97,9 @@ class Eva {
     }
     eval(expr: Expr, env: Environment = this.global): any { // TODO:type return type
         // Self Evaluating Expressions
+
+
+
 
         if (isNumber(expr)) {
             return expr
@@ -112,20 +113,55 @@ class Eva {
             return env.lookup(expr)
         }
 
+        if (isFunctionDefinition(expr)) {
+            const [_tag, func_name, params, body] = expr as FunctionDefinition
 
+            // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
 
+            const fn: UserFunction = {
+                params, body, env // lexical closure
+            }
 
+            return env.define(func_name, fn)
+        }
+
+        // handle function call
+        if (isFunction(expr)) {
+            const [func_name, ...args] = expr as FunctionCall
+            // evaluate the arguments, based on the environment
+            const evaluated_args = [...args].map((arg) => this.eval(arg, env)) //TODO: change the 
+            const callee = env.lookup(func_name)
+
+            if (typeof callee === "function") { //TODO: change to a more reable form, not sure where the function type comes from here
+                return callee(...evaluated_args)
+            }
+
+            if (isUserDefinedFunction(callee)) {
+                if (callee.params.length !== evaluated_args.length) {
+                    throw new Error(`Function ${func_name} expected ${callee.params.length} args, received ${evaluated_args.length}`)
+                }
+                const activationRecord = new Map<string, RuntimeValue>()
+                callee.params.forEach((param, i) => {
+                    activationRecord.set(param, evaluated_args[i] as RuntimeValue)
+                })
+                const activationEnv = new Environment(callee.env, activationRecord)
+                return this.eval(callee.body, activationEnv)
+            }
+
+            throw new Error(`Attempted to call non-function value: ${JSON.stringify(callee)}`)
+
+        }
         // -----------------------------------------------------------------
         // Blocks - a sequence of expressions
 
-        if (expr[0] === 'begin') {
+        if (isBlock(expr)) {
             // should initialize a block scope environment
             const block_env = new Environment(env, new Map())
             return this.evalBlock(expr, block_env)
         }
 
         // Commands
-        if (isCommand(expr[0])) {
+        if (isCommandExpr(expr)) {
             const [_, var_name, value] = expr
             if (expr[0] == "var") {
 
@@ -142,7 +178,7 @@ class Eva {
             }
         }
 
-        if (isComparisonOperator(expr[0])) {
+        if (isComparisonExpr(expr)) {
             const [operator, arg_1, arg_2] = expr
             const arg_1_value = this.eval(arg_1, env)
             const arg_2_value = this.eval(arg_2, env)
@@ -162,7 +198,7 @@ class Eva {
 
 
         }
-        if (expr[0] === "if") {
+        if (isIfBlock(expr)) {
             const [_, condition, if_branch, else_branch] = expr
 
             if (this.eval(condition, env) === true) { // TODO: replace literal with type
@@ -176,7 +212,7 @@ class Eva {
             }
         }
 
-        if (expr[0] === "while") {
+        if (isWhileBlock(expr)) {
             const [_tag, condition, _do] = expr
             let result
             while (this.eval(condition, env)) {
@@ -187,14 +223,8 @@ class Eva {
 
 
 
-        if (isFunction(expr)) {
-            // check the global environment for the function name
-            const [func_name, ...args] = expr
 
-            const evaluated_args = [...args].map((arg) => this.eval(arg, env))
-            return (env.lookup(func_name) as Function)(...evaluated_args) // TODO: narrow the type
-            // TODO: handle user defined functions (which scope ?)
-        }
+
         else {
             throw new Error(`Expr: ${expr} could not be evaluated`)
         }
@@ -229,9 +259,52 @@ function isCommand(command: string): command is Command {
     return commands.includes(command as Command) //TODO: not sure why the as keyword is used here
 }
 
-function isFunction(expr: any): expr is Func {
-    return typeof expr[0] === "string" && Array.isArray(expr)
+function isArrayExpr(expr: Expr): expr is Exclude<Expr, number | string> {
+    return Array.isArray(expr)
 }
+
+function isFunction(expr: Expr): boolean {
+    if (!isArrayExpr(expr) || typeof expr[0] !== "string") {
+        return false
+    }
+
+    const tag = expr[0]
+    return !isCommand(tag) && tag !== "begin" && tag !== "if" && tag !== "while" && tag !== "function" && !isComparisonOperator(tag) // terrible code, makes the check tightly bound to the definitions
+}
+
+function isBlock(expr: Expr): expr is Block {
+    return isArrayExpr(expr) && expr[0] === "begin"
+}
+
+function isComparisonExpr(expr: Expr): expr is [ComparisonOperator, Expr, Expr] {
+    return isArrayExpr(expr) && typeof expr[0] === "string" && isComparisonOperator(expr[0])
+}
+
+function isIfBlock(expr: Expr): expr is IfBlock {
+    return isArrayExpr(expr) && expr[0] === "if"
+}
+
+function isWhileBlock(expr: Expr): expr is whileBlock {
+    return isArrayExpr(expr) && expr[0] === "while"
+}
+
+function isCommandExpr(expr: Expr): expr is [Command, string, Expr] {
+    return isArrayExpr(expr) && typeof expr[0] === "string" && isCommand(expr[0])
+}
+
+
+function isFunctionDefinition(expr: Expr): expr is FunctionDefinition {
+    return isArrayExpr(expr) && (expr[0]) === "def"
+}
+
+function isUserDefinedFunction(value: RuntimeValue): value is UserFunction {
+    return typeof value === "object" &&
+        value !== null &&
+        "params" in value &&
+        "body" in value &&
+        "env" in value
+}
+
 export {
     Eva,
     isString,
