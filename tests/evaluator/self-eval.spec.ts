@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Environment, Eva } from "../src/eva";
+import { Environment, Eva } from "../../src/eva";
 
 describe("Self Evaluating Expressions", () => {
 
