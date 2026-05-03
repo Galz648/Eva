@@ -13,7 +13,10 @@ type ComparisonOperator = typeof comparisonOperators[number]
 type Block = ['begin', ...Expr[]]
 type IfBlock = ['if', Expr, Expr, Expr]
 type whileBlock = ["while", Expr, Block] // while, condition, code
-type Expr = number | string | [ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition
+type LambdaFunction = ["lambda", Expr, Expr]
+type varDeclaration = ["var", string, Expr]
+type varAssignment = ["set", string, Expr]
+type Expr = number | string | [ComparisonOperator, Expr, Expr] | varAssignment | varDeclaration | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition | LambdaFunction
 // function types
 const builtins = ["null", "true", "false", ...comparisonOperators, ...commands] as const
 type Builtin = typeof builtins[number]
@@ -78,6 +81,7 @@ class Eva {
                 return op1 - op2
             }],
             ["/", (op1: number, op2: number) => op1 / op2],
+            ["==", (op1: number, op2: number): boolean => op1 === op2]
 
         ]
     ))) {
@@ -113,16 +117,31 @@ class Eva {
             return env.lookup(expr)
         }
 
+        if (isLambdaFunction(expr)) {
+            const [_tag, params, body] = expr as LambdaFunction
+
+            // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
+
+            const fn = {
+                params, body, env // lexical closure
+            }
+
+            return fn
+
+        }
+
         if (isFunctionDefinition(expr)) {
             const [_tag, func_name, params, body] = expr as FunctionDefinition
 
             // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
-
+            // JIT transpile to a var declaration
             const fn: UserFunction = {
                 params, body, env // lexical closure
             }
 
-            return env.define(func_name, fn)
+            const varExpr: varDeclaration = ["var", func_name, ["lambda", params, body]] // TODO: fix type error (params)
+
+            return this.eval(varExpr, env)
         }
 
         // handle function call
@@ -242,6 +261,9 @@ function isString(expr: Expr): expr is string { //TODO: change return type to li
 
 }
 
+function isLambdaFunction(expr: Expr): expr is LambdaFunction {
+    return expr[0] === "lambda" && Array.isArray(expr)
+}
 
 // type guard number
 function isNumber(expr: Expr): expr is number {
