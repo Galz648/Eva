@@ -1,3 +1,9 @@
+type Cursor = {} // TODO: track the current word within the input string (have to deal with the generated parser)
+
+interface CallFrame {
+    env: Environment,
+    cursor: Cursor
+}
 type UserFunction = {
     params: string[],
     body: Expr,
@@ -13,7 +19,10 @@ type ComparisonOperator = typeof comparisonOperators[number]
 type Block = ['begin', ...Expr[]]
 type IfBlock = ['if', Expr, Expr, Expr]
 type whileBlock = ["while", Expr, Block] // while, condition, code
-type Expr = number | string | [ComparisonOperator, Expr, Expr] | [Command, string, Expr] | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition
+type LambdaFunction = ["lambda", Expr[], Expr]
+type varDeclaration = ["var", string, Expr]
+type varAssignment = ["set", string, Expr]
+type Expr = number | string | [ComparisonOperator, Expr, Expr] | varAssignment | varDeclaration | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition | LambdaFunction
 // function types
 const builtins = ["null", "true", "false", ...comparisonOperators, ...commands] as const
 type Builtin = typeof builtins[number]
@@ -23,6 +32,7 @@ type FunctionCall = [Builtin | string, ...Expr[]]
 class Environment {
     parent: Environment | null
     record: Scope = new Map()
+
 
     constructor(parent: Environment | null, record: Scope = new Map()) {
         this.parent = parent
@@ -67,6 +77,7 @@ class Environment {
 
 class Eva {
     global: Environment
+    call_stack: Array<CallFrame>
     constructor(global: Environment = new Environment(null, new Map(
         [
             ["+", (op1: number, op2: number) => op1 + op2],
@@ -78,10 +89,12 @@ class Eva {
                 return op1 - op2
             }],
             ["/", (op1: number, op2: number) => op1 / op2],
+            ["==", (op1: number, op2: number): boolean => op1 === op2]
 
         ]
     ))) {
         this.global = global
+        this.call_stack = []
     }
 
     evalBlock(block: Block, block_env: Environment) {
@@ -113,29 +126,56 @@ class Eva {
             return env.lookup(expr)
         }
 
+        if (isLambdaFunction(expr)) {
+            const [_tag, params, body] = expr as LambdaFunction
+
+            // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
+
+            const fn = {
+                params, body, env // lexical closure
+            }
+
+            return fn
+
+        }
+
         if (isFunctionDefinition(expr)) {
             const [_tag, func_name, params, body] = expr as FunctionDefinition
 
             // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
-
+            // JIT transpile to a var declaration
             const fn: UserFunction = {
                 params, body, env // lexical closure
             }
 
-            return env.define(func_name, fn)
+            const varExpr: varDeclaration = ["var", func_name, ["lambda", params, body]] // TODO: fix type error (params)
+
+            return this.eval(varExpr, env)
         }
 
         // handle function call
         if (isFunction(expr)) {
             const [func_name, ...args] = expr as FunctionCall
+
+            const frame = {
+                cursor: {},
+                env
+            }
+            // TODO: create an execution stack, including the environment, cursor (not implemented yet)
+            this.call_stack.push(frame)
+
+            console.debug(`pushed frame:`, frame)
             // evaluate the arguments, based on the environment
             const evaluated_args = [...args].map((arg) => this.eval(arg, env)) //TODO: change the 
             const callee = env.lookup(func_name)
 
             if (typeof callee === "function") { //TODO: change to a more reable form, not sure where the function type comes from here
-                return callee(...evaluated_args)
+                const call_result = callee(...evaluated_args)
+                console.debug(`popped call:`, this.call_stack.pop())
+                return call_result
             }
 
+            // TODO: make more readable
             if (isUserDefinedFunction(callee)) {
                 if (callee.params.length !== evaluated_args.length) {
                     throw new Error(`Function ${func_name} expected ${callee.params.length} args, received ${evaluated_args.length}`)
@@ -242,6 +282,9 @@ function isString(expr: Expr): expr is string { //TODO: change return type to li
 
 }
 
+function isLambdaFunction(expr: Expr): expr is LambdaFunction {
+    return expr[0] === "lambda" && Array.isArray(expr)
+}
 
 // type guard number
 function isNumber(expr: Expr): expr is number {
