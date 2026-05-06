@@ -1,83 +1,11 @@
-type Cursor = {} // TODO: track the current word within the input string (have to deal with the generated parser)
+import { Transformer } from "./transformer";
+import { type Block, type CallFrame, type Command, commands, type ComparisonOperator, comparisonOperators, Environment, type Expr, type FunctionCall, type FunctionDefinition, type IfBlock, type LambdaFunction, type RuntimeValue, type SwitchBlock, type UserFunction, type varDeclaration, type whileBlock } from "./types";
 
-interface CallFrame {
-    env: Environment,
-    cursor: Cursor
-}
-type UserFunction = {
-    params: string[],
-    body: Expr,
-    env: Environment
-}
-type RuntimeValue = number | string | boolean | Function | UserFunction
-type Scope = Map<string, RuntimeValue>
-const commands = ["set", "var"] as const
-type Command = typeof commands[number]
-type FunctionDefinition = ["def", string, string[], Expr] // definition keyword, function name, args, body
-const comparisonOperators = [">", "<", "==", "!==", "=>", "<="] as const // TODO: move these to the global scope as functions
-type ComparisonOperator = typeof comparisonOperators[number]
-type Block = ['begin', ...Expr[]]
-type IfBlock = ['if', Expr, Expr, Expr]
-type whileBlock = ["while", Expr, Block] // while, condition, code
-type LambdaFunction = ["lambda", Expr[], Expr]
-type varDeclaration = ["var", string, Expr]
-type varAssignment = ["set", string, Expr]
-type Expr = number | string | [ComparisonOperator, Expr, Expr] | varAssignment | varDeclaration | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition | LambdaFunction
-// function types
-const builtins = ["null", "true", "false", ...comparisonOperators, ...commands] as const
-type Builtin = typeof builtins[number]
-type FunctionCall = [Builtin | string, ...Expr[]]
-
-
-class Environment {
-    parent: Environment | null
-    record: Scope = new Map()
-
-
-    constructor(parent: Environment | null, record: Scope = new Map()) {
-        this.parent = parent
-        this.record = record
-    }
-
-    resolveScopeByVariableName(variable_name: string): Scope {
-        // TODO: lookup in parent
-
-        if (!this.record.has(variable_name)) {
-            if (this.parent) {
-                return this.parent.resolveScopeByVariableName(variable_name)
-            }
-            throw Error(`Variable ${variable_name} not found in scope: ${JSON.stringify(this.record)}`)
-        }
-        return this.record
-    }
-
-    lookup(variable_name: string): RuntimeValue {
-        const scope = this.resolveScopeByVariableName(variable_name)
-        const value = scope.get(variable_name)
-        if (value !== undefined) {
-            return value
-        }
-        else {
-            throw new Error(`Could not resolve lookup for variable ${variable_name}`)
-        }
-    }
-
-    define(variable_name: string, value: RuntimeValue) {
-        // TODO: determine if this should throw an error if the variable already exists.
-        this.record.set(variable_name, value)
-        return value
-    }
-
-    assign(variable_name: string, value: RuntimeValue) {
-        const scope = this.resolveScopeByVariableName(variable_name)
-        // set the variable inside the found scope
-        scope.set(variable_name, value)
-    }
-}
 
 class Eva {
     global: Environment
     call_stack: Array<CallFrame>
+    transformer: Transformer
     constructor(global: Environment = new Environment(null, new Map(
         [
             ["+", (op1: number, op2: number) => op1 + op2],
@@ -95,6 +23,7 @@ class Eva {
     ))) {
         this.global = global
         this.call_stack = []
+        this.transformer = new Transformer()
     }
 
     evalBlock(block: Block, block_env: Environment) {
@@ -108,12 +37,9 @@ class Eva {
 
         return lastest_expression_evaluated
     }
+
     eval(expr: Expr, env: Environment = this.global): any { // TODO:type return type
         // Self Evaluating Expressions
-
-
-
-
         if (isNumber(expr)) {
             return expr
         }
@@ -127,147 +53,200 @@ class Eva {
         }
 
         if (isLambdaFunction(expr)) {
-            const [_tag, params, body] = expr as LambdaFunction
-
-            // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
-
-            const fn = {
-                params, body, env // lexical closure
-            }
-
-            return fn
-
+            return this.evalLambda(expr as LambdaFunction, env)
         }
 
         if (isFunctionDefinition(expr)) {
-            const [_tag, func_name, params, body] = expr as FunctionDefinition
-
-            // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
-            // JIT transpile to a var declaration
-            const fn: UserFunction = {
-                params, body, env // lexical closure
-            }
-
-            const varExpr: varDeclaration = ["var", func_name, ["lambda", params, body]] // TODO: fix type error (params)
-
-            return this.eval(varExpr, env)
+            return this.evalFunctionDefinition(expr as FunctionDefinition, env)
         }
 
-        // handle function call
         if (isFunction(expr)) {
-            const [func_name, ...args] = expr as FunctionCall
-
-            const frame = {
-                cursor: {},
-                env
-            }
-            // TODO: create an execution stack, including the environment, cursor (not implemented yet)
-            this.call_stack.push(frame)
-
-            console.debug(`pushed frame:`, frame)
-            // evaluate the arguments, based on the environment
-            const evaluated_args = [...args].map((arg) => this.eval(arg, env)) //TODO: change the 
-            const callee = env.lookup(func_name)
-
-            if (typeof callee === "function") { //TODO: change to a more reable form, not sure where the function type comes from here
-                const call_result = callee(...evaluated_args)
-                console.debug(`popped call:`, this.call_stack.pop())
-                return call_result
-            }
-
-            // TODO: make more readable
-            if (isUserDefinedFunction(callee)) {
-                if (callee.params.length !== evaluated_args.length) {
-                    throw new Error(`Function ${func_name} expected ${callee.params.length} args, received ${evaluated_args.length}`)
-                }
-                const activationRecord = new Map<string, RuntimeValue>()
-                callee.params.forEach((param, i) => {
-                    activationRecord.set(param, evaluated_args[i] as RuntimeValue)
-                })
-                const activationEnv = new Environment(callee.env, activationRecord)
-                return this.eval(callee.body, activationEnv)
-            }
-
-            throw new Error(`Attempted to call non-function value: ${JSON.stringify(callee)}`)
-
+            return this.evalFunctionCall(expr as FunctionCall, env)
         }
+
+        // Parenthesized atoms parse as single-element arrays, e.g. (200) -> [200]
+        // Must run after function calls so (foo) -> ["foo"] is a zero-arity call, not lookup.
+        if (Array.isArray(expr) && expr.length === 1) { // something to do with the parser
+            return this.eval(expr[0] as Expr, env)
+        }
+
         // -----------------------------------------------------------------
         // Blocks - a sequence of expressions
 
         if (isBlock(expr)) {
-            // should initialize a block scope environment
-            const block_env = new Environment(env, new Map())
-            return this.evalBlock(expr, block_env)
+            return this.evalBeginBlock(expr, env)
         }
 
-        // Commands
         if (isCommandExpr(expr)) {
-            const [_, var_name, value] = expr
-            if (expr[0] == "var") {
-
-                if (isVariableName(var_name)) {
-                    env.define(var_name, this.eval(value, env))
-                }
-
-                return this.eval(value, env)
-            }
-            if (expr[0] == "set") {
-                // should set the value of the variable in the current environment
-                env.assign(var_name as string, this.eval(value, env))
-                return this.eval(value, env)
-            }
+            return this.evalVarOrSet(expr, env)
         }
 
         if (isComparisonExpr(expr)) {
-            const [operator, arg_1, arg_2] = expr
-            const arg_1_value = this.eval(arg_1, env)
-            const arg_2_value = this.eval(arg_2, env)
-
-            if (!(isNumber(arg_1_value) && isNumber(arg_2_value))) {
-                throw new Error(`Could not compare non-number values, after resolution and evaluation.\n\t expr: ${expr}\n\t typeof arg_1: ${typeof arg_1_value}\n\t typeof arg_2: ${typeof arg_2_value}`)
-            }
-            if (operator === ">") {
-                return arg_1_value > arg_2_value ? true : false
-            }
-            if (operator === "<") {
-                return arg_1_value < arg_2_value ? true : false
-            }
-            if (operator === "==") {
-                return arg_1_value === arg_2_value ? true : false
-            }
-
-
+            return this.evalComparison(expr, env)
         }
-        if (isIfBlock(expr)) {
-            const [_, condition, if_branch, else_branch] = expr
 
-            if (this.eval(condition, env) === true) { // TODO: replace literal with type
-                return this.eval(if_branch, env)
-            }
-            else if (this.eval(condition, env) === false) {
-                return this.eval(else_branch, env)
-            }
-            else {
-                throw new Error(`if condition didn't evaluate to a boolean. ${JSON.stringify(condition)}`)
-            }
+        if (isSwitchStatement(expr)) {
+            return this.evalSwitch(expr as SwitchBlock, env)
+        }
+
+        if (isIfBlock(expr)) {
+            return this.evalIf(expr as IfBlock, env)
         }
 
         if (isWhileBlock(expr)) {
-            const [_tag, condition, _do] = expr
-            let result
-            while (this.eval(condition, env)) {
-                result = this.eval(_do, env)
+            return this.evalWhile(expr, env)
+        }
+
+        return this.throwUnevaluatable(expr)
+    }
+
+    private evalLambda(expr: LambdaFunction, env: Environment): UserFunction {
+        const [_tag, params, body] = expr
+
+        // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
+
+        const fn = {
+            params, body, env // lexical closure
+        }
+
+        return fn as UserFunction
+
+    }
+
+    private evalFunctionDefinition(expr: FunctionDefinition, env: Environment): any {
+        const [_tag, func_name, params, body] = expr
+
+        // an example of where to define runtime semantics, such as capturing the environment (closures, php vs JS function runtime semantics)
+        // JIT transpile to a var declaration
+        const fn: UserFunction = {
+            params, body, env // lexical closure
+        }
+
+        const varExpr: varDeclaration = ["var", func_name, ["lambda", params, body]] // TODO: fix type error (params)
+
+        return this.eval(varExpr, env)
+    }
+
+    private evalFunctionCall(expr: FunctionCall, env: Environment): any {
+        const [func_name, ...args] = expr
+
+        const frame = {
+            cursor: {},
+            env
+        }
+        // TODO: create an execution stack, including the environment, cursor (not implemented yet)
+        this.call_stack.push(frame)
+
+        // console.debug(`pushed frame:`, frame)
+        // evaluate the arguments, based on the environment
+        const evaluated_args = [...args].map((arg) => this.eval(arg, env)) //TODO: change the 
+        const callee = env.lookup(func_name)
+
+        if (typeof callee === "function") { //TODO: change to a more reable form, not sure where the function type comes from here
+            const call_result = callee(...evaluated_args)
+            // console.debug(`popped call:`, this.call_stack.pop())
+            return call_result
+        }
+
+        // TODO: make more readable
+        if (isUserDefinedFunction(callee)) {
+            if (callee.params.length !== evaluated_args.length) {
+                throw new Error(`Function ${func_name} expected ${callee.params.length} args, received ${evaluated_args.length}`)
             }
-            return result
+            const activationRecord = new Map<string, RuntimeValue>()
+            callee.params.forEach((param, i) => {
+                activationRecord.set(param, evaluated_args[i] as RuntimeValue)
+            })
+            const activationEnv = new Environment(callee.env, activationRecord)
+            return this.eval(callee.body, activationEnv)
+        }
+
+        throw new Error(`Attempted to call non-function value: ${JSON.stringify(callee)}`)
+    }
+
+    private evalBeginBlock(expr: Block, env: Environment): any {
+        // should initialize a block scope environment
+        const block_env = new Environment(env, new Map())
+        return this.evalBlock(expr, block_env)
+    }
+
+    private evalVarOrSet(expr: [Command, string, Expr], env: Environment): any {
+        const [_, var_name, value] = expr
+        if (expr[0] == "var") {
+
+            if (isVariableName(var_name)) {
+                env.define(var_name, this.eval(value, env))
+            }
+
+            return this.eval(value, env)
+        }
+        if (expr[0] == "set") {
+            // should set the value of the variable in the current environment
+            env.assign(var_name as string, this.eval(value, env))
+            return this.eval(value, env)
+        }
+    }
+
+    private evalComparison(expr: [ComparisonOperator, Expr, Expr], env: Environment): any {
+        const [operator, arg_1, arg_2] = expr
+        const arg_1_value = this.eval(arg_1, env)
+        const arg_2_value = this.eval(arg_2, env)
+
+        if (!(isNumber(arg_1_value) && isNumber(arg_2_value))) {
+            throw new Error(`Could not compare non-number values, after resolution and evaluation.\n\t expr: ${expr}\n\t typeof arg_1: ${typeof arg_1_value}\n\t typeof arg_2: ${typeof arg_2_value}`)
+        }
+        if (operator === ">") {
+            return arg_1_value > arg_2_value ? true : false
+        }
+        if (operator === "<") {
+            return arg_1_value < arg_2_value ? true : false
+        }
+        if (operator === "==") {
+            return arg_1_value === arg_2_value ? true : false
         }
 
 
+    }
 
+    private evalSwitch(expr: SwitchBlock, env: Environment): any {
+        // const [_tag, [condition, block], else_branch ] = expr
+        const if_expr = this.transformer.transformWhileToIfBlock(expr) // ["switch", [Condition, Expr], Expr]
+        // #region agent log
+        fetch('http://127.0.0.1:7741/ingest/8985d195-1e99-4005-a528-9dc8e4a0e3cd', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '47d1dd' }, body: JSON.stringify({ sessionId: '47d1dd', runId: 'pre-fix', hypothesisId: 'H2', location: 'eva.ts:isSwitchStatement', message: 'switch AST and transformed if', data: { switchExpr: expr, if_expr }, timestamp: Date.now() }) }).catch(() => { });
+        // #endregion
+        return this.eval(if_expr, env)
+    }
 
+    private evalIf(expr: IfBlock, env: Environment): any {
+        const [_, condition, if_branch, else_branch] = expr
+        // #region agent log
+        fetch('http://127.0.0.1:7741/ingest/8985d195-1e99-4005-a528-9dc8e4a0e3cd', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '47d1dd' }, body: JSON.stringify({ sessionId: '47d1dd', runId: 'pre-fix', hypothesisId: 'H5', location: 'eva.ts:isIfBlock', message: 'if branches', data: { condition, if_branch, else_branch, elseIsArray: Array.isArray(else_branch), elseLen: Array.isArray(else_branch) ? else_branch.length : undefined }, timestamp: Date.now() }) }).catch(() => { });
+        // #endregion
 
-        else {
-            throw new Error(`Expr: ${expr} could not be evaluated`)
+        const cond = this.eval(condition, env) // TODO: replace literal with type
+        if (cond === true) {
+            return this.eval(if_branch, env)
         }
+        if (cond === false) {
+            return this.eval(else_branch, env)
+        }
+        throw new Error(`if condition didn't evaluate to a boolean. ${JSON.stringify(condition)}`)
+    }
+
+    private evalWhile(expr: whileBlock, env: Environment): any {
+        const [_tag, condition, _do] = expr
+        let result
+        while (this.eval(condition, env)) {
+            result = this.eval(_do, env)
+        }
+        return result
+    }
+
+    private throwUnevaluatable(expr: Expr): never {
+        // #region agent log
+        fetch('http://127.0.0.1:7741/ingest/8985d195-1e99-4005-a528-9dc8e4a0e3cd', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '47d1dd' }, body: JSON.stringify({ sessionId: '47d1dd', runId: 'pre-fix', hypothesisId: 'H1', location: 'eva.ts:eval:fallthrough', message: 'eval fallthrough — unhandled expr', data: { typeofExpr: typeof expr, isArray: Array.isArray(expr), arrayLen: Array.isArray(expr) ? expr.length : undefined, firstType: Array.isArray(expr) && expr.length ? typeof expr[0] : undefined, stringified: JSON.stringify(expr) }, timestamp: Date.now() }) }).catch(() => { });
+        // #endregion
+        throw new Error(`Expr: ${expr} could not be evaluated`)
     }
 
 }
@@ -283,7 +262,8 @@ function isString(expr: Expr): expr is string { //TODO: change return type to li
 }
 
 function isLambdaFunction(expr: Expr): expr is LambdaFunction {
-    return expr[0] === "lambda" && Array.isArray(expr)
+    return Array.isArray(expr)
+        && expr[0] === "lambda"
 }
 
 // type guard number
@@ -306,13 +286,29 @@ function isArrayExpr(expr: Expr): expr is Exclude<Expr, number | string> {
     return Array.isArray(expr)
 }
 
+// Tags that look like (tag ...) calls but are special forms, not calls.
+// Keeps `commands` as the single source for var/set; comparison ops handled via isComparisonOperator.
+const NOT_FUNCTION_CALL_TAGS = new Set<string>([
+    "begin",
+    "if",
+    "while",
+    "switch",
+    "function",
+    ...commands,
+])
+
 function isFunction(expr: Expr): boolean {
     if (!isArrayExpr(expr) || typeof expr[0] !== "string") {
         return false
     }
-
     const tag = expr[0]
-    return !isCommand(tag) && tag !== "begin" && tag !== "if" && tag !== "while" && tag !== "function" && !isComparisonOperator(tag) // terrible code, makes the check tightly bound to the definitions
+    if (NOT_FUNCTION_CALL_TAGS.has(tag)) {
+        return false
+    }
+    if (isComparisonOperator(tag)) {
+        return false
+    }
+    return true
 }
 
 function isBlock(expr: Expr): expr is Block {
@@ -340,6 +336,9 @@ function isFunctionDefinition(expr: Expr): expr is FunctionDefinition {
     return isArrayExpr(expr) && (expr[0]) === "def"
 }
 
+function isSwitchStatement(expr: Expr): expr is SwitchBlock { //TODO: fix type guard
+    return isArrayExpr(expr) && expr[0] === "switch"
+}
 function isUserDefinedFunction(value: RuntimeValue): value is UserFunction {
     return typeof value === "object" &&
         value !== null &&
