@@ -56,8 +56,12 @@ type UserFunction = {
     env: Environment
 }
 
+type ElseBranch = [Expr]
+type IfBranch = [Condition, Expr]
+// type Branch = IfBranch | ElseBranch
 type Condition = [ComparisonOperator, Expr, Expr]
-type SwitchBlock = ["switch", Condition, Expr, Expr] // switch [<condition_1> <block_1>, ... , <condition_N> <block_N>] TODO: dtermine if these should be Expressions or Blocks
+type ComparisonExpr = [ComparisonOperator, Expr, Expr]
+type SwitchBlock = ["switch", [Condition, Expr][], Expr?] // switch [<condition_1> <block_1>, ... , <condition_N> <block_N>] TODO: dtermine if these should be Expressions or Blocks
 type RuntimeValue = number | string | boolean | Function | UserFunction
 type Scope = Map<string, RuntimeValue>
 const commands = ["set", "var"] as const
@@ -66,12 +70,12 @@ type FunctionDefinition = ["def", string, string[], Expr] // definition keyword,
 const comparisonOperators = [">", "<", "==", "!==", "=>", "<="] as const // TODO: move these to the global scope as functions
 type ComparisonOperator = typeof comparisonOperators[number]
 type Block = ['begin', ...Expr[]]
-type IfBlock = ['if', Condition, Expr, Expr] // if, condition, body, alternate
+type IfBlock = ['if', Condition, Expr, Expr?] // if, condition, body, alternate
 type whileBlock = ["while", Expr, Block] // while, condition, code
 type LambdaFunction = ["lambda", Expr[], Expr]
 type varDeclaration = ["var", string, Expr]
 type varAssignment = ["set", string, Expr]
-type Expr = number | string | Condition | varAssignment | varDeclaration | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition | LambdaFunction | SwitchBlock
+type Expr = number | string | Condition | varAssignment | varDeclaration | Block | IfBlock | whileBlock | FunctionCall | FunctionDefinition | LambdaFunction | SwitchBlock | ComparisonExpr
 // function types
 const builtins = ["null", "true", "false", ...comparisonOperators, ...commands] as const
 type Builtin = typeof builtins[number]
@@ -97,7 +101,7 @@ export type {
     varAssignment,
     Expr,
     Builtin,
-    FunctionCall
+    FunctionCall,
 }
 export {
     Environment,

@@ -17,7 +17,7 @@ class Eva {
                 return op1 - op2
             }],
             ["/", (op1: number, op2: number) => op1 / op2],
-            ["==", (op1: number, op2: number): boolean => op1 === op2]
+            ["==", (op1: number, op2: number) => op1 === op2]
 
         ]
     ))) {
@@ -30,8 +30,10 @@ class Eva {
 
 
         let lastest_expression_evaluated // TODO: type this or something
+
         const expressions: Expr[] = block.slice(1) as Expr[]
         expressions.forEach((expr) => {
+            console.log(`evaluating expression: ${JSON.stringify(expr)} in evalBlock`)
             lastest_expression_evaluated = this.eval(expr, block_env)
         })
 
@@ -39,6 +41,7 @@ class Eva {
     }
 
     eval(expr: Expr, env: Environment = this.global): any { // TODO:type return type
+        console.log(`eval evaluation expression: ${JSON.stringify(expr)}`)
         // Self Evaluating Expressions
         if (isNumber(expr)) {
             return expr
@@ -90,7 +93,7 @@ class Eva {
         }
 
         if (isIfBlock(expr)) {
-            return this.evalIf(expr as IfBlock, env)
+            return this.evalIf(expr, env)
         }
 
         if (isWhileBlock(expr)) {
@@ -187,7 +190,7 @@ class Eva {
         }
     }
 
-    private evalComparison(expr: [ComparisonOperator, Expr, Expr], env: Environment): any {
+    private evalComparison(expr: [ComparisonOperator, Expr, Expr], env: Environment): boolean {
         const [operator, arg_1, arg_2] = expr
         const arg_1_value = this.eval(arg_1, env)
         const arg_2_value = this.eval(arg_2, env)
@@ -205,15 +208,15 @@ class Eva {
             return arg_1_value === arg_2_value ? true : false
         }
 
+        else {
+            throw Error(`unhandled operator: ${operator}`)
+        }
 
     }
 
     private evalSwitch(expr: SwitchBlock, env: Environment): any {
         // const [_tag, [condition, block], else_branch ] = expr
         const if_expr = this.transformer.transformWhileToIfBlock(expr) // ["switch", [Condition, Expr], Expr]
-        // #region agent log
-        fetch('http://127.0.0.1:7741/ingest/8985d195-1e99-4005-a528-9dc8e4a0e3cd', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '47d1dd' }, body: JSON.stringify({ sessionId: '47d1dd', runId: 'pre-fix', hypothesisId: 'H2', location: 'eva.ts:isSwitchStatement', message: 'switch AST and transformed if', data: { switchExpr: expr, if_expr }, timestamp: Date.now() }) }).catch(() => { });
-        // #endregion
         return this.eval(if_expr, env)
     }
 
@@ -243,9 +246,6 @@ class Eva {
     }
 
     private throwUnevaluatable(expr: Expr): never {
-        // #region agent log
-        fetch('http://127.0.0.1:7741/ingest/8985d195-1e99-4005-a528-9dc8e4a0e3cd', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '47d1dd' }, body: JSON.stringify({ sessionId: '47d1dd', runId: 'pre-fix', hypothesisId: 'H1', location: 'eva.ts:eval:fallthrough', message: 'eval fallthrough — unhandled expr', data: { typeofExpr: typeof expr, isArray: Array.isArray(expr), arrayLen: Array.isArray(expr) ? expr.length : undefined, firstType: Array.isArray(expr) && expr.length ? typeof expr[0] : undefined, stringified: JSON.stringify(expr) }, timestamp: Date.now() }) }).catch(() => { });
-        // #endregion
         throw new Error(`Expr: ${expr} could not be evaluated`)
     }
 
